@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wi-Fi 名称显示修复助手</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="hero">
+      <div class="hero-left">
+        <h1>📶 Wi-Fi 名称显示修复助手</h1>
+        <p class="sub">如果你的电脑在 WiFi 列表里看到的中文名字是乱码，点下面的按钮，我来帮你找出原因。</p>
+      </div>
+      <span id="adminBadge" class="badge" title="修复系统服务时才需要管理员权限">普通权限</span>
+    </header>
+
+    <section class="card action-card">
+      <button id="btnScan" class="btn big primary">🔍 开始检测</button>
+      <div id="busyBox" class="busy hidden">
+        <span class="spinner"></span>
+        <span id="busyText">正在检查系统设置、扫描周围的 WiFi（大约 5～8 秒），请稍候…</span>
+      </div>
+      <p id="firstHint" class="hint">检测只是“看一看”，不会改动电脑的任何设置，请放心使用。</p>
+    </section>
+
+    <section id="resultCard" class="card result hidden">
+      <h2 id="resultTitle">检测结果</h2>
+      <pre id="conclusion" class="conclusion"></pre>
+      <pre id="advice" class="advice"></pre>
+      <div class="btn-row">
+        <button id="btnOpenRegion" class="btn primary hidden">🌐 打开系统区域设置（去修复）</button>
+        <button id="btnFix" class="btn primary hidden">🛠️ 一键安全修复（重启WLAN服务）</button>
+        <button id="btnSteps" class="btn">📋 查看手动修复步骤</button>
+        <button id="btnReport" class="btn">💾 保存诊断报告到桌面</button>
+      </div>
+    </section>
+
+    <section id="listCard" class="card hidden">
+      <h2>📡 周围的 WiFi（乱码 ↔ 真名 对照表）</h2>
+      <p class="table-hint">红色行 = 在你这台电脑上会显示成乱码的 WiFi。对照「系统面板显示为」这一列，就能在系统 WiFi 列表里认出它，正常连接不受影响。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>真实名称</th>
+              <th>系统面板显示为</th>
+              <th>信号</th>
+              <th>加密</th>
+              <th>名称编码</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="wifiBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="techCard" class="card hidden">
+      <details>
+        <summary>🔬 技术详情（给帮你修电脑的人看）</summary>
+        <pre id="techDetails"></pre>
+      </details>
+    </section>
+
+    <footer class="foot">
+      <span id="verText">Wi-Fi 名称显示修复助手</span>
+      <span>本工具不联网、不收集任何信息，所有报告只保存在你自己的电脑上</span>
+    </footer>
+  </div>
+
+  <!-- 通用弹窗 -->
+  <div id="modalOverlay" class="overlay hidden">
+    <div class="modal">
+      <h3 id="modalTitle"></h3>
+      <pre id="modalText"></pre>
+      <div class="modal-btns">
+        <button id="modalCancel" class="btn hidden">取消</button>
+        <button id="modalOk" class="btn primary">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

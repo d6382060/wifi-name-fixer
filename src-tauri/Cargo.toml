@@ -1,0 +1,39 @@
+[package]
+name = "wifi-name-fixer"
+version = "1.0.0"
+description = "Wi-Fi 名称显示修复助手：检测并修复 Windows WiFi 列表中文名乱码"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+encoding_rs = "0.8"
+winreg = "0.56"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_WiFi",
+  "Win32_Globalization",
+  "Win32_Security",
+  "Win32_System_Threading",
+  "Win32_System_Services",
+  "Win32_System_SystemInformation",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[features]
+# custom-protocol 负责把 ../src 前端静态文件嵌进 exe，纯 cargo build 即可产出单文件程序
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
