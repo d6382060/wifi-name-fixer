@@ -26,6 +26,24 @@ function showModalBase(title, text, withCancel) {
 const showModal = (title, text) => showModalBase(title, text, false);
 const confirmModal = (title, text) => showModalBase(title, text, true);
 
+// ---------- 原生系统对话框（官方 dialog 插件） ----------
+// 关键确认用系统原生弹窗（小白更信任）；插件不可用时退回 HTML 弹窗。
+// 长文本说明仍用 HTML 弹窗（可滚动、排版好）。
+function nativeAsk(title, text, kind) {
+  const dlg = window.__TAURI__ && window.__TAURI__.dialog;
+  if (dlg && typeof dlg.ask === "function") {
+    return dlg.ask(text, { title, kind: kind || "info" });
+  }
+  return confirmModal(title, text);
+}
+function nativeMessage(title, text, kind) {
+  const dlg = window.__TAURI__ && window.__TAURI__.dialog;
+  if (dlg && typeof dlg.message === "function") {
+    return dlg.message(text, { title, kind: kind || "info" });
+  }
+  return showModal(title, text);
+}
+
 // ---------- 启动 ----------
 window.addEventListener("DOMContentLoaded", async () => {
   $("btnScan").onclick = startScan;
@@ -44,7 +62,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     if (info.autoScan) startScan(); // 提权重启后的实例自动开始检测
   } catch (e) {
-    showModal("提示", "初始化失败：" + e);
+    nativeMessage("提示", "初始化失败：" + e, "error");
   }
 });
 
@@ -61,7 +79,7 @@ async function startScan() {
     lastDiag = await invoke("run_diagnosis", { triggerScan: true });
     render(lastDiag);
   } catch (e) {
-    showModal("检测失败", String(e));
+    nativeMessage("检测失败", String(e), "error");
   }
   setBusy(false);
   $("btnScan").textContent = "🔍 重新检测";
@@ -186,12 +204,13 @@ function buildTechText(d) {
 
 // ---------- 修复动作 ----------
 async function oneClickFix() {
-  const ok = await confirmModal(
+  const ok = await nativeAsk(
     "一键安全修复",
     "将重新启动 Windows 的「WLAN 自动配置」服务，用来刷新 WiFi 列表缓存。\n\n" +
     "· 执行期间 WiFi 会断开几秒钟，之后自动恢复\n" +
     "· 不会删除、不会改动你保存过的任何 WiFi 和密码\n" +
-    "· 需要管理员权限\n\n确定继续吗？"
+    "· 需要管理员权限\n\n确定继续吗？",
+    "warning"
   );
   if (!ok) return;
   try {
@@ -200,14 +219,15 @@ async function oneClickFix() {
   } catch (e) {
     const err = String(e);
     if (err.includes("NEED_ADMIN")) {
-      const go = await confirmModal(
+      const go = await nativeAsk(
         "需要管理员权限",
-        "重启系统服务需要管理员权限。\n\n点「确定」后本工具会重新打开一次，" +
-        "并弹出 Windows 蓝色的授权确认框（UAC），请在那里选择「是」。"
+        "重启系统服务需要管理员权限。\n\n点「是」后本工具会重新打开一次，" +
+        "并弹出 Windows 蓝色的授权确认框（UAC），请在那里选择「是」。",
+        "warning"
       );
       if (go) {
         try { await invoke("relaunch_admin"); }
-        catch (e2) { showModal("提示", String(e2)); }
+        catch (e2) { nativeMessage("提示", String(e2), "error"); }
       }
     } else {
       showModal("修复未成功", err);
@@ -229,7 +249,7 @@ async function openRegion() {
       "重启后再打开 WiFi 列表看看，乱码就应该消失了。"
     );
   } catch (e) {
-    showModal("提示", String(e));
+    nativeMessage("提示", String(e), "error");
   }
 }
 
@@ -258,12 +278,13 @@ function showSteps() {
 async function saveReport() {
   try {
     const path = await invoke("save_report");
-    const open = await confirmModal(
+    const open = await nativeAsk(
       "报告已保存",
-      "诊断报告已保存到：\n" + path + "\n\n要打开它所在的文件夹吗？"
+      "诊断报告已保存到：\n" + path + "\n\n要打开它所在的文件夹吗？",
+      "info"
     );
     if (open) await invoke("reveal_report", { path });
   } catch (e) {
-    showModal("提示", String(e));
+    nativeMessage("提示", String(e), "error");
   }
 }

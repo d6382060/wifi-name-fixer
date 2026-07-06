@@ -94,10 +94,3 @@ fn desktop_dir() -> PathBuf {
     }
     PathBuf::from(std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into())).join("Desktop")
 }
-
-/// 在资源管理器中定位到刚保存的文件
-pub fn reveal_in_explorer(path: &str) {
-    let _ = std::process::Command::new("explorer.exe")
-        .arg(format!("/select,{}", path))
-        .spawn();
-}

@@ -39,7 +39,10 @@ WiFi 名称（SSID）在无线电波中只是**一串字节**（最长 32 字节
 
 ## 技术栈
 
-- Rust + Tauri 2（前端为纯 HTML/CSS/JS，无 Node/npm 依赖，`cargo build` 直接产出单文件 exe）
+- Rust（edition 2024）+ Tauri 2，采用官方推荐工程结构：`lib.rs` 承载全部逻辑（`run()` + `mobile_entry_point`），`main.rs` 仅为桌面薄壳
+- 前端为纯 HTML/CSS/JS（无 Node/npm 依赖），`cargo build` 直接产出单文件 exe
+- **所有耗时命令均为 `async fn` + `tauri::async_runtime::spawn_blocking`**：Tauri 2 的同步命令在主线程执行，任何阻塞工作都会冻结界面，这是官方明确的规则
+- 官方插件：`tauri-plugin-dialog`（原生系统确认框）、`tauri-plugin-opener`（资源管理器定位文件）
 - `windows` crate：WLAN API / 代码页 / 服务状态 / 提权（UAC）/ 已知文件夹
 - `encoding_rs`：GBK / Big5 / Shift-JIS 解码
 - 运行依赖：Microsoft Edge WebView2 运行时（Win11 与近年 Win10 自带；缺失时启动会给出下载提示）
@@ -67,18 +70,19 @@ wifi-name-fixer/
 ├─ src/                    # 前端（纯静态，编译时嵌入 exe）
 │  ├─ index.html
 │  ├─ style.css
-│  └─ main.js
+│  └─ main.js              # 关键确认走 dialog 插件原生弹窗，长文本走 HTML 弹窗
 ├─ src-tauri/
 │  ├─ src/
-│  │  ├─ main.rs           # 入口：Tauri 命令、--selftest、WebView2 检测
+│  │  ├─ main.rs           # 桌面端薄壳（官方结构：不放逻辑）
+│  │  ├─ lib.rs            # 应用入口 run()、Tauri 命令（async + spawn_blocking）、插件注册
 │  │  ├─ diagnose.rs       # 诊断决策矩阵 + 大白话结论生成
-│  │  ├─ wifi.rs           # WLAN API 扫描、SSID 原始字节编码判定、乱码模拟
+│  │  ├─ wifi.rs           # WLAN API 扫描、SSID 原始字节编码判定、乱码模拟（含单元测试）
 │  │  ├─ system.rs         # ACP/区域/版本/服务状态、重启服务、打开 intl.cpl
 │  │  ├─ privilege.rs      # 管理员检测、UAC 提权重启
 │  │  ├─ repair.rs         # 修复编排（低风险）+ 修复日志
 │  │  └─ report.rs         # 诊断报告生成/保存桌面
 │  ├─ tauri.conf.json
-│  ├─ capabilities/default.json
+│  ├─ capabilities/default.json   # core:default + dialog:default
 │  └─ icons/icon.ico
 └─ README.md
 ```

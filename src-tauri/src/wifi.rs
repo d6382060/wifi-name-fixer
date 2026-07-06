@@ -63,43 +63,41 @@ impl ScanError {
 /// 保证拿到的是新鲜列表而不是缓存。
 /// 成功返回 (网络列表, 无线网卡描述)。
 pub fn scan(acp: u32, trigger_scan: bool) -> Result<(Vec<WifiNetwork>, String), ScanError> {
-    unsafe {
-        let mut ver = 0u32;
-        let mut handle = HANDLE::default();
-        let r = WlanOpenHandle(2, None, &mut ver, &mut handle);
-        if r == ERROR_SERVICE_NOT_ACTIVE {
-            return Err(ScanError::ServiceDown);
-        }
-        if r != 0 {
-            return Err(ScanError::Api(r, "WlanOpenHandle"));
-        }
-        let result = scan_inner(handle, acp, trigger_scan);
-        let _ = WlanCloseHandle(handle, None);
-        result
+    let mut ver = 0u32;
+    let mut handle = HANDLE::default();
+    let r = unsafe { WlanOpenHandle(2, None, &mut ver, &mut handle) };
+    if r == ERROR_SERVICE_NOT_ACTIVE {
+        return Err(ScanError::ServiceDown);
     }
+    if r != 0 {
+        return Err(ScanError::Api(r, "WlanOpenHandle"));
+    }
+    let result = scan_inner(handle, acp, trigger_scan);
+    let _ = unsafe { WlanCloseHandle(handle, None) };
+    result
 }
 
-unsafe fn scan_inner(
+/// 打开句柄后的扫描主体。FFI 调用集中在显式 unsafe 块中（edition 2024 风格）。
+fn scan_inner(
     handle: HANDLE,
     acp: u32,
     trigger_scan: bool,
 ) -> Result<(Vec<WifiNetwork>, String), ScanError> {
-    let mut if_list: *mut WLAN_INTERFACE_INFO_LIST = std::ptr::null_mut();
-    let r = WlanEnumInterfaces(handle, None, &mut if_list);
-    if r != 0 {
-        return Err(ScanError::Api(r, "WlanEnumInterfaces"));
-    }
-
     let mut ifaces: Vec<(GUID, String)> = Vec::new();
-    {
+    unsafe {
+        let mut if_list: *mut WLAN_INTERFACE_INFO_LIST = std::ptr::null_mut();
+        let r = WlanEnumInterfaces(handle, None, &mut if_list);
+        if r != 0 {
+            return Err(ScanError::Api(r, "WlanEnumInterfaces"));
+        }
         let list = &*if_list;
         let first = list.InterfaceInfo.as_ptr();
         for i in 0..list.dwNumberOfItems as usize {
             let info = &*first.add(i);
             ifaces.push((info.InterfaceGuid, utf16_to_string(&info.strInterfaceDescription)));
         }
+        WlanFreeMemory(if_list as *const core::ffi::c_void);
     }
-    WlanFreeMemory(if_list as *const core::ffi::c_void);
 
     if ifaces.is_empty() {
         return Err(ScanError::NoAdapter);
@@ -108,7 +106,7 @@ unsafe fn scan_inner(
     if trigger_scan {
         for (guid, _) in &ifaces {
             // 触发失败（如网卡刚被禁用）不致命，仍可读取上次的扫描结果
-            let _ = WlanScan(handle, guid, None, None, None);
+            let _ = unsafe { WlanScan(handle, guid, None, None, None) };
         }
         std::thread::sleep(std::time::Duration::from_millis(4200));
     }
@@ -116,37 +114,39 @@ unsafe fn scan_inner(
     // 同一 SSID 可能出现多条（已连接项 + 扫描项），按原始字节去重合并
     let mut merged: HashMap<Vec<u8>, WifiNetwork> = HashMap::new();
     for (guid, _) in &ifaces {
-        let mut nl: *mut WLAN_AVAILABLE_NETWORK_LIST = std::ptr::null_mut();
-        let r = WlanGetAvailableNetworkList(handle, guid, 0, None, &mut nl);
-        if r != 0 {
-            continue;
+        unsafe {
+            let mut nl: *mut WLAN_AVAILABLE_NETWORK_LIST = std::ptr::null_mut();
+            let r = WlanGetAvailableNetworkList(handle, guid, 0, None, &mut nl);
+            if r != 0 {
+                continue;
+            }
+            let list = &*nl;
+            let first = list.Network.as_ptr();
+            for i in 0..list.dwNumberOfItems as usize {
+                let nw = &*first.add(i);
+                let len = (nw.dot11Ssid.uSSIDLength as usize).min(32);
+                let raw = nw.dot11Ssid.ucSSID[..len].to_vec();
+                let connected = nw.dwFlags & 1 != 0; // WLAN_AVAILABLE_NETWORK_CONNECTED
+                let entry = build_entry(
+                    &raw,
+                    acp,
+                    nw.wlanSignalQuality,
+                    nw.bSecurityEnabled.as_bool(),
+                    nw.dot11DefaultAuthAlgorithm.0,
+                    connected,
+                );
+                merged
+                    .entry(raw)
+                    .and_modify(|e| {
+                        if entry.signal > e.signal {
+                            e.signal = entry.signal;
+                        }
+                        e.connected = e.connected || entry.connected;
+                    })
+                    .or_insert(entry);
+            }
+            WlanFreeMemory(nl as *const core::ffi::c_void);
         }
-        let list = &*nl;
-        let first = list.Network.as_ptr();
-        for i in 0..list.dwNumberOfItems as usize {
-            let nw = &*first.add(i);
-            let len = (nw.dot11Ssid.uSSIDLength as usize).min(32);
-            let raw = nw.dot11Ssid.ucSSID[..len].to_vec();
-            let connected = nw.dwFlags & 1 != 0; // WLAN_AVAILABLE_NETWORK_CONNECTED
-            let entry = build_entry(
-                &raw,
-                acp,
-                nw.wlanSignalQuality,
-                nw.bSecurityEnabled.as_bool(),
-                nw.dot11DefaultAuthAlgorithm.0,
-                connected,
-            );
-            merged
-                .entry(raw)
-                .and_modify(|e| {
-                    if entry.signal > e.signal {
-                        e.signal = entry.signal;
-                    }
-                    e.connected = e.connected || entry.connected;
-                })
-                .or_insert(entry);
-        }
-        WlanFreeMemory(nl as *const core::ffi::c_void);
     }
 
     let mut nets: Vec<WifiNetwork> = merged.into_values().collect();
